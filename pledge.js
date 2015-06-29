@@ -3,11 +3,11 @@ Promises Workshop: build the pledge.js deferral-style promise library
 ----------------------------------------------------------------*/
 // YOUR CODE HERE:
 
-$Promise = function(state) {
-  this.state = state;
+$Promise = function() {
+  this.state = 'pending';
   this.handlerGroups = [];
 };
-
+/*
 
 $Promise.prototype.callHandlers = function(){
   //console.log('typeof ', typeof this.handlerGroups[0].successCb)
@@ -35,20 +35,53 @@ $Promise.prototype.callHandlers = function(){
    }
 
 }
-
+*/
+$Promise.prototype.callHandlers = function(){
+  //var self = this;
+  if(this.state === 'pending') return
+  var group, handler;
+  while(this.handlerGroups.length){
+    group = this.handlerGroups.shift();
+    handler = (this.state === 'resolved') ? group.successCb : group.errorCb
+    if(!handler){
+      if(this.state === 'resolved'){
+        group.forwarder.resolve(this.value)
+      }
+      else if(this.state === 'rejected'){
+        group.forwarder.reject(this.value)
+      }
+    }
+    else{
+      try{
+        var output = handler(this.value)
+        if(output instanceof $Promise){
+          output.then(function(val){
+            group.forwarder.resolve(val);
+          }, function(err){
+            group.forwarder.reject(err);
+          })
+        }else{
+          group.forwarder.resolve(output)
+        }
+      }catch (err){
+        group.forwarder.reject(err)
+      }
+    }
+  }
+}
 
 $Promise.prototype.then = function(successHandler, failureHandler) {
-  this.handlerGroups.push( {
+  var handlerGroup = {
     successCb: successHandler,
     errorCb: failureHandler,
     forwarder: new Deferral()
-
-  });
-  if (typeof successHandler !== "function") this.handlerGroups[this.handlerGroups.length-1].successCb = undefined;
-  if (typeof failureHandler !== "function") this.handlerGroups[this.handlerGroups.length-1].errorCb = undefined;
-  if(this.state !== 'pending'){
-     this.callHandlers();
   }
+  this.handlerGroups.push( handlerGroup );
+  if (typeof successHandler !== "function") this.handlerGroups[this.handlerGroups.length-1].successCb = null;
+  if (typeof failureHandler !== "function") this.handlerGroups[this.handlerGroups.length-1].errorCb = null;
+
+  this.callHandlers();
+  return handlerGroup.forwarder.$promise
   
 };
 
@@ -58,7 +91,7 @@ $Promise.prototype.catch = function(errFn){
 
 
 Deferral = function() {
-  this.$promise = new $Promise('pending');
+  this.$promise = new $Promise();
 
 };
 
